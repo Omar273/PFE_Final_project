@@ -1,0 +1,42 @@
+{
+  "model_name": "XGBoost",
+  "f1_weighted": 0.8597,
+  "rf_cv_f1": 0.9046,
+  "xgb_cv_f1": 0.916,
+  "feature_cols": [
+    "sev_numeric",
+    "cvss_score",
+    "cwe_tier",
+    "log_age",
+    "has_mitigation",
+    "verified",
+    "scanner_confidence",
+    "risk_accepted",
+    "cvss_x_sev",
+    "is_old",
+    "no_fix",
+    "high_cwe"
+  ],
+  "label_names": [
+    "Low",
+    "Medium",
+    "High",
+    "Critical"
+  ],
+  "n_train_samples": 9892,
+  "n_test_samples": 1250,
+  "feature_importance": {
+    "sev_numeric": 0.4501,
+    "cvss_score": 0.0539,
+    "cwe_tier": 0.0631,
+    "log_age": 0.0118,
+    "has_mitigation": 0.0414,
+    "verified": 0.0156,
+    "scanner_confidence": 0.0136,
+    "risk_accepted": 0.0167,
+    "cvss_x_sev": 0.1792,
+    "is_old": 0.0182,
+    "no_fix": 0.0611,
+    "high_cwe": 0.0754
+  }
+}
