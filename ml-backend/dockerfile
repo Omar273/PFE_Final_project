@@ -1,0 +1,43 @@
+# ── Stage 1: Train the model ──────────────────────────────────────────────────
+FROM python:3.11-slim AS trainer
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy ML code
+COPY ml/ ./ml/
+COPY api/ ./api/
+
+# Generate dataset + train model → produces models/risk_model.joblib
+RUN python ml/generate_dataset.py && python ml/train.py
+
+# ── Stage 2: Runtime API ──────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# Install only runtime dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY api/ ./api/
+COPY ml/  ./ml/
+
+# Copy trained model from trainer stage
+COPY --from=trainer /app/models/ ./models/
+COPY --from=trainer /app/data/   ./data/
+
+# Non-root user for security
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

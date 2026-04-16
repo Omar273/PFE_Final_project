@@ -1,0 +1,279 @@
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: pfe-project-frontend:latest  # Build this from your Dockerfile
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# ML Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-backend
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-backend
+  template:
+    metadata:
+      labels:
+        app: ml-backend
+    spec:
+      containers:
+      - name: ml-backend
+        image: pfe-project-ml-backend:latest  # Your existing ML backend image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: ml-backend-config
+        volumeMounts:
+        - name: ml-models
+          mountPath: /app/models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: ml-models
+        persistentVolumeClaim:
+          claimName: ml-models
+---
+# DefectDojo Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: defectdojo
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: defectdojo
+  template:
+    metadata:
+      labels:
+        app: defectdojo
+    spec:
+      containers:
+      - name: defectdojo
+        image: defectdojo/defectdojo-django:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: defectdojo-config
+        - secretRef:
+            name: defectdojo-secrets
+        volumeMounts:
+        - name: dd-media
+          mountPath: /app/media
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/v2/users/?limit=1
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/v2/users/?limit=1
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+      volumes:
+      - name: dd-media
+        persistentVolumeClaim:
+          claimName: dd-media
+---
+# Celery Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery
+  template:
+    metadata:
+      labels:
+        app: celery
+    spec:
+      containers:
+      - name: celery
+        image: defectdojo/defectdojo-django:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/entrypoint-celery-worker.sh"]
+        envFrom:
+        - secretRef:
+            name: defectdojo-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: postgres-secrets
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - defectdojo
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - defectdojo
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-data
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: pfe-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5

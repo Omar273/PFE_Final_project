@@ -1,0 +1,150 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DefectDojo Security Dashboard — Full Stack
+#
+#  Services:
+#    frontend     → React + Nginx         http://localhost:80
+#    ml-backend   → FastAPI + XGBoost     http://localhost:8000  (internal)
+#    defectdojo   → DefectDojo CE         http://localhost:8080
+#    db           → PostgreSQL 14         (internal only)
+#    redis        → Redis 7               (internal only)
+#    celery       → DefectDojo worker     (internal only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── 1. React Frontend (Nginx) ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./defectdojo-dashborad
+      dockerfile: Dockerfile
+    container_name: dd-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      ml-backend:
+        condition: service_healthy
+      defectdojo:
+        condition: service_healthy
+    networks:
+      - dd-network
+    restart: unless-stopped
+
+  # ── 2. ML Backend (FastAPI + XGBoost) ─────────────────────────────────────
+  ml-backend:
+    build:
+      context: ./ml-backend
+      dockerfile: Dockerfile
+    container_name: dd-ml-backend
+    ports:
+      - "8000:8000"       # expose for direct Swagger access: http://localhost:8000/docs
+    environment:
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ml-models:/app/models   # persist trained model across restarts
+    networks:
+      - dd-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s   # model training takes ~20s on first build
+
+  # ── 3. DefectDojo (Community Edition) ─────────────────────────────────────
+  defectdojo:
+    image: defectdojo/defectdojo-django:latest
+    container_name: dd-defectdojo
+    ports:
+      - "8080:8080"
+    environment:
+      - DD_DATABASE_URL=postgresql://defectdojo:defectdojo@db:5432/defectdojo
+      - DD_SECRET_KEY=change-me-in-production-use-long-random-string
+      - DD_CREDENTIAL_AES_256_KEY=change-me-16-char
+      - DD_ALLOWED_HOSTS=*
+      - DD_CELERY_BROKER_URL=redis://redis:6379/0
+      - DD_DJANGO_METRICS_ENABLED=False
+      - DD_INITIALIZE=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dd-network
+    volumes:
+      - dd-media:/app/media
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v2/users/?limit=1",
+             "-H", "Authorization: Token placeholder"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  # ── 4. Celery Worker (DefectDojo background tasks) ──────────────────────── import large scans
+  celery:
+    image: defectdojo/defectdojo-django:latest    
+    container_name: dd-celery
+    command: /entrypoint-celery-worker.sh
+    environment:
+      - DD_DATABASE_URL=postgresql://defectdojo:defectdojo@db:5432/defectdojo
+      - DD_SECRET_KEY=change-me-in-production-use-long-random-string
+      - DD_CREDENTIAL_AES_256_KEY=change-me-16-char
+      - DD_CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dd-network
+    restart: unless-stopped
+
+  # ── 5. PostgreSQL ──────────────────────────────────────────────────────────
+  db:
+    image: postgres:14-alpine
+    container_name: dd-postgres
+    environment:
+      POSTGRES_DB:       defectdojo
+      POSTGRES_USER:     defectdojo
+      POSTGRES_PASSWORD: defectdojo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - dd-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defectdojo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 6. Redis ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: dd-redis
+    networks:
+      - dd-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  dd-media:
+  ml-models:      # trained model persisted here — survives container restarts
+
+# ── Network ───────────────────────────────────────────────────────────────────
+networks:
+  dd-network:
+    driver: bridge
