@@ -11,16 +11,28 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 class FindingInput(BaseModel):
-    """Un finding DefectDojo à scorer."""
-    id:                  Optional[int]   = Field(None,  description="ID DefectDojo")
-    severity:            Optional[str]   = Field("Info", description="Info|Low|Medium|High|Critical")
-    cvss_score:          Optional[float] = Field(None)   # no ge/le — null is valid
-    cwe:                 Optional[int]   = Field(0)
-    age_days:            Optional[float] = Field(90)
-    has_mitigation:      Optional[int]   = Field(0)
-    verified:            Optional[int]   = Field(0)
-    scanner_confidence:  Optional[int]   = Field(3)
-    risk_accepted:       Optional[int]   = Field(0)
+    """Un finding DefectDojo à scorer — v2 sans fuite de données."""
+    id:                     Optional[int]   = Field(None)
+    # ── Vulnerability context (features actives) ─────────────────────────────
+    cwe:                    Optional[int]   = Field(0)
+    age_days:               Optional[float] = Field(90)
+    has_mitigation:         Optional[int]   = Field(0)
+    verified:               Optional[int]   = Field(0)
+    scanner_confidence:     Optional[int]   = Field(3)
+    risk_accepted:          Optional[int]   = Field(0)
+    # ── Exploitability signals ────────────────────────────────────────────────
+    epss_score:             Optional[float] = Field(0.05, description="EPSS probability 0-1")
+    exploit_public:         Optional[int]   = Field(0,    description="Known public exploit exists")
+    threat_intel_mentions:  Optional[float] = Field(0.0,  description="CTI mentions normalized 0-1")
+    github_poc:             Optional[int]   = Field(0,    description="Public PoC on GitHub")
+    # ── Remediation behaviour ────────────────────────────────────────────────
+    escalated:              Optional[int]   = Field(0)
+    manually_fixed:         Optional[int]   = Field(0)
+    # ── Deployment context ───────────────────────────────────────────────────
+    deploy_context_score:   Optional[float] = Field(0.5,  description="0=dev 0.5=staging 1=prod")
+    # ── Display only — NOT used as ML features (kept for UI/logging) ─────────
+    severity:               Optional[str]   = Field(None)
+    cvss_score:             Optional[float] = Field(None)
 
     @field_validator("severity", mode="before")
     @classmethod
