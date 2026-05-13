@@ -1,8 +1,8 @@
 {
   "model_name": "XGBoost",
-  "f1_weighted": 1.0,
-  "rf_cv_f1": 1.0,
-  "xgb_cv_f1": 1.0,
+  "f1_weighted": 0.9789,
+  "rf_cv_f1": 0.9496,
+  "xgb_cv_f1": 0.9747,
   "feature_cols": [
     "cwe_tier",
     "log_age",
@@ -23,22 +23,22 @@
     "Not Exploited",
     "Exploited"
   ],
-  "n_train_samples": 620,
-  "n_test_samples": 100,
+  "n_train_samples": 530098,
+  "n_test_samples": 66581,
   "feature_importance": {
-    "cwe_tier": 0.0102,
-    "log_age": 0.0256,
-    "is_old": 0.0072,
-    "no_fix": 0.0079,
-    "verified": 0.0127,
-    "scanner_confidence": 0.0287,
-    "risk_accepted": 0.0067,
-    "epss_score": 0.2963,
-    "exploit_public": 0.5393,
-    "threat_intel_mentions": 0.0099,
-    "github_poc": 0.0049,
-    "escalated": 0.014,
-    "manually_fixed": 0.0112,
-    "deploy_context_score": 0.0255
+    "cwe_tier": 0.0,
+    "log_age": 0.0164,
+    "is_old": 0.0382,
+    "no_fix": 0.06,
+    "verified": 0.0581,
+    "scanner_confidence": 0.0425,
+    "risk_accepted": 0.0562,
+    "epss_score": 0.4756,
+    "exploit_public": 0.0525,
+    "threat_intel_mentions": 0.0161,
+    "github_poc": 0.0515,
+    "escalated": 0.0553,
+    "manually_fixed": 0.0595,
+    "deploy_context_score": 0.0183
   }
 }
