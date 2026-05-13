@@ -33,38 +33,26 @@ from xgboost import XGBClassifier
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT       = Path(__file__).parent.parent
-DATA_PATH  = ROOT / "data"  / "findings_clean.csv"
+DATA_PATH  = ROOT / "data"  / "real_findings.csv"
 MODEL_DIR  = ROOT / "models"
 MODEL_DIR.mkdir(exist_ok=True)
 MODEL_PATH = MODEL_DIR / "risk_model.joblib"
 META_PATH  = MODEL_DIR / "model_meta.json"
 
-# ── Feature columns (must match API input schema) ─────────────────────────────
-FEATURE_COLS = [
-    "cwe_tier",
-    "log_age",
-    "is_old",
-    "no_fix",
-    "verified",
-    "scanner_confidence",
-    "risk_accepted",
-    "epss_score",
-    "exploit_public",
-    "threat_intel_mentions",
-    "github_poc",
-    "escalated",
-    "manually_fixed",
-    "deploy_context_score",
-]
-TARGET_COL  = "risk_label"
-LABEL_NAMES = ["Low", "Medium", "High", "Critical"]
+TARGET_COL  = "exploited"
+
+# Label names for binary classification (0=not exploited, 1=exploited)
+LABEL_NAMES = ["Not Exploited", "Exploited"]
 
 
 def load_data(path: Path):
     df = pd.read_csv(path)
-    missing = [c for c in FEATURE_COLS + [TARGET_COL] if c not in df.columns]
+    # Check for missing feature columns
+    missing = [c for c in FEATURE_COLS if c not in df.columns]
     if missing:
         raise ValueError(f"Colonnes manquantes dans le CSV : {missing}")
+    if TARGET_COL not in df.columns:
+        raise ValueError(f"Colonne cible '{TARGET_COL}' manquante")
     X = df[FEATURE_COLS].values.astype(np.float32)
     y = df[TARGET_COL].values.astype(int)
     return X, y

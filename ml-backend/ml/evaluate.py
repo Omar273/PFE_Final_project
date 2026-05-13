@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                               confusion_matrix, roc_curve, roc_auc_score)
-from ml.features import FEATURE_COLS
+from .features import FEATURE_COLS
 
 ROOT = Path(__file__).parent.parent
 df = pd.read_csv(ROOT / "data" / "real_findings.csv")
