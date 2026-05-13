@@ -17,7 +17,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends , Header
 from fastapi.middleware.cors import CORSMiddleware
 from pythonjsonlogger import jsonlogger
 
@@ -30,8 +30,13 @@ from api.schemas import (
     HealthResponse,
     ModelInfoResponse,
     PredictResponse,
-)
-from ml.features import batch_to_features, finding_to_features, LABEL_NAMES
+) 
+from ml.features import batch_to_features, finding_to_features, LABEL_NAMES 
+API_KEY = os.environ["ML_API_KEY"] 
+
+def verify_api_key(x_api_key: str = Header(...)):
+    if x_api_key != API_KEY:
+        raise HTTPException(401, "Invalid API key")
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logger = logging.getLogger("risk_api")
@@ -82,11 +87,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:80,http://localhost:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # restreindre en production
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -134,7 +142,7 @@ def model_info():
     return _state["meta"]
 
 
-@app.post("/predict", response_model=PredictResponse, tags=["Inference"])
+@app.post("/predict", response_model=PredictResponse, dependencies=[Depends(verify_api_key)] , tags=["Inference"])
 def predict(finding: FindingInput):
     """
     Score un seul finding DefectDojo.
@@ -145,8 +153,8 @@ def predict(finding: FindingInput):
         logger.info("predict", extra={"id": finding.id, "risk": result["risk_name"]})
         return {**result, "id": finding.id}
     except Exception as e:
-        logger.error("predict error", extra={"error": str(e)})
-        raise HTTPException(500, str(e))
+       logger.error("predict error", extra={"error": str(e)}, exc_info=True)
+       raise HTTPException(500, "Internal server error")
 
 
 @app.post("/predict/batch", response_model=BatchPredictResponse, tags=["Inference"])

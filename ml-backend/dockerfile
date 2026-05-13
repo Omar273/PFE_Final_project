@@ -12,7 +12,7 @@ COPY ml/ ./ml/
 COPY api/ ./api/
 
 # Generate dataset + train model → produces models/risk_model.joblib
-RUN python ml/generate_dataset.py && python ml/train.py
+RUN PYTHONPATH=/app python ml/generate_dataset.py && PYTHONPATH=/app python ml/train.py
 
 # ── Stage 2: Runtime API ──────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime

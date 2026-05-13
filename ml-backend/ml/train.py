@@ -11,7 +11,9 @@ Usage :
 import argparse
 import json
 import time
-from pathlib import Path
+from pathlib import Path 
+from ml.features import FEATURE_COLS, LABEL_NAMES  # new imports
+
 
 import joblib
 import numpy as np
@@ -39,18 +41,20 @@ META_PATH  = MODEL_DIR / "model_meta.json"
 
 # ── Feature columns (must match API input schema) ─────────────────────────────
 FEATURE_COLS = [
-    "sev_numeric",
-    "cvss_score",
     "cwe_tier",
     "log_age",
-    "has_mitigation",
+    "is_old",
+    "no_fix",
     "verified",
     "scanner_confidence",
     "risk_accepted",
-    "cvss_x_sev",
-    "is_old",
-    "no_fix",
-    "high_cwe",
+    "epss_score",
+    "exploit_public",
+    "threat_intel_mentions",
+    "github_poc",
+    "escalated",
+    "manually_fixed",
+    "deploy_context_score",
 ]
 TARGET_COL  = "risk_label"
 LABEL_NAMES = ["Low", "Medium", "High", "Critical"]
