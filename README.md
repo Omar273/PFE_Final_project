@@ -107,6 +107,15 @@ npm run build
 
 ```
 pfe_project/
+├── github/workflows/
+|         ├── code-quality.yml
+|         ├── dashboard-ci.yml         # CI pipeline
+|         ├── docker-build.yml
+|         ├── integration-tests.yml
+|         ├── kubernetes-deploy.yml
+|         ├── kubernetes-deploy.yml
+|         ├──ml-backend-ci.yml     
+|          
 ├── README.md                          # This file
 ├── docker-compose.yaml                # Full stack orchestration
 │
