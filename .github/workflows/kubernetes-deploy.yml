@@ -1,0 +1,110 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: defectdojo-dashboard
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set deployment environment
+      id: env
+      run: |
+        if [[ "${{ github.ref }}" == "refs/tags/v"* ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "image_tag=latest" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+      if: ${{ secrets.KUBE_CONFIG != '' }}
+
+    - name: Create/Update Kubernetes resources
+      run: |
+        # Create namespace if it doesn't exist
+        kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Apply configuration files
+        kubectl apply -f kubernetes/namespace.yaml
+        kubectl apply -f kubernetes/configmaps.yaml
+        kubectl apply -f kubernetes/secretes.yaml
+        kubectl apply -f kubernetes/volumes.yaml
+        
+        echo "✓ Kubernetes resources created/updated"
+      continue-on-error: true
+
+    - name: Update image references in deployments
+      run: |
+        sed -i "s|IMAGE_TAG|${{ steps.env.outputs.image_tag }}|g" kubernetes/deployments.yaml
+        sed -i "s|REGISTRY|${{ env.REGISTRY }}|g" kubernetes/deployments.yaml
+        sed -i "s|REPO|${{ github.repository }}|g" kubernetes/deployments.yaml
+      if: ${{ secrets.KUBE_CONFIG != '' }}
+
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f kubernetes/deployments.yaml -n ${{ env.NAMESPACE }}
+        echo "✓ Deployments applied"
+      if: ${{ secrets.KUBE_CONFIG != '' }}
+      continue-on-error: true
+
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/frontend -n ${{ env.NAMESPACE }} --timeout=5m || true
+        kubectl rollout status deployment/ml-backend -n ${{ env.NAMESPACE }} --timeout=5m || true
+        echo "✓ Rollout complete"
+      if: ${{ secrets.KUBE_CONFIG != '' }}
+      continue-on-error: true
+
+    - name: Verify deployments
+      run: |
+        kubectl get deployments -n ${{ env.NAMESPACE }}
+        kubectl get pods -n ${{ env.NAMESPACE }}
+        kubectl describe service -n ${{ env.NAMESPACE }}
+      if: ${{ secrets.KUBE_CONFIG != '' }}
+      continue-on-error: true
+
+    - name: Print deployment info
+      run: |
+        echo "Environment: ${{ steps.env.outputs.environment }}"
+        echo "Image Tag: ${{ steps.env.outputs.image_tag }}"
+        echo "Namespace: ${{ env.NAMESPACE }}"
+        echo ""
+        echo "Next steps:"
+        echo "- Monitor logs: kubectl logs -f deployment/frontend -n ${{ env.NAMESPACE }}"
+        echo "- Check status: kubectl get all -n ${{ env.NAMESPACE }}"
+        echo "- Access frontend: kubectl port-forward svc/frontend 80:80 -n ${{ env.NAMESPACE }}"

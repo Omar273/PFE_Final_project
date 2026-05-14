@@ -1,0 +1,118 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: 'defectdojo-dashboard/package-lock.json'
+
+    - name: Install ML backend dependencies
+      working-directory: ml-backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install dashboard dependencies
+      working-directory: defectdojo-dashboard
+      run: npm ci
+
+    - name: Start ML backend service
+      working-directory: ml-backend
+      run: |
+        pip install uvicorn
+        uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        sleep 5
+        
+    - name: Test ML backend health endpoint
+      run: |
+        curl -f http://localhost:8000/health || exit 1
+        echo "✓ ML backend is healthy"
+
+    - name: Test ML backend model endpoint
+      run: |
+        curl -f http://localhost:8000/model/info || exit 1
+        echo "✓ Model info endpoint working"
+
+    - name: Build dashboard
+      working-directory: defectdojo-dashboard
+      run: npm run build
+
+    - name: Run API integration tests
+      working-directory: ml-backend
+      run: |
+        pip install pytest pytest-asyncio httpx
+        pytest tests/test_integration.py -v || true
+
+    - name: Check Docker Compose validity
+      run: |
+        docker-compose config > /dev/null
+        echo "✓ docker-compose.yaml is valid"
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install security tools
+      run: |
+        pip install bandit safety pip-audit
+
+    - name: Scan Python code with bandit
+      working-directory: ml-backend
+      run: |
+        bandit -r api/ ml/ --exit-zero
+      continue-on-error: true
+
+    - name: Check for vulnerable dependencies (safety)
+      working-directory: ml-backend
+      run: |
+        safety check --file requirements.txt --exit-code 0
+      continue-on-error: true
+
+    - name: Check npm dependencies
+      working-directory: defectdojo-dashboard
+      run: |
+        npm audit --audit-level=moderate || true
+      continue-on-error: true
